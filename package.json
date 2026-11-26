@@ -1,0 +1,11 @@
+{
+  "name": "bond-digest-bot-power-automate",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}
