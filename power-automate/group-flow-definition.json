@@ -1,0 +1,329 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "GroupId": {
+      "type": "String",
+      "metadata": {
+        "description": "Microsoft 365 group object ID for sdc@groups.bond.edu.au"
+      }
+    },
+    "CareersWeekday": {
+      "type": "String",
+      "defaultValue": "Wednesday"
+    },
+    "WorkbookDriveId": {
+      "type": "String"
+    },
+    "WorkbookId": {
+      "type": "String"
+    },
+    "ScriptId": {
+      "type": "String"
+    },
+    "StateScriptId": {
+      "type": "String"
+    }
+  },
+  "triggers": {
+    "On_group_email": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365groupsmail",
+          "connection": "shared_office365groupsmail",
+          "operationId": "OnNewEmailInGroup"
+        },
+        "parameters": {
+          "groupId": "@parameters('GroupId')"
+        }
+      },
+      "recurrence": {
+        "frequency": "Minute",
+        "interval": 1
+      },
+      "splitOn": "@triggerOutputs()?['body/value']",
+      "runtimeConfiguration": {
+        "concurrency": {
+          "runs": 1
+        },
+        "secureData": {
+          "properties": ["outputs"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Get_group_conversation": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365groupsmail",
+          "connection": "shared_office365groupsmail",
+          "operationId": "GetGroupConversation"
+        },
+        "parameters": {
+          "groupId": "@parameters('GroupId')",
+          "conversationId": "@triggerBody()?['id']"
+        }
+      },
+      "runAfter": {},
+      "runtimeConfiguration": {
+        "secureData": {
+          "properties": ["inputs", "outputs"]
+        }
+      }
+    },
+    "Digest_topic": {
+      "type": "Compose",
+      "inputs": "@trim(coalesce(body('Get_group_conversation')?['topic'], ''))",
+      "runAfter": {
+        "Get_group_conversation": ["Succeeded"]
+      },
+      "runtimeConfiguration": {
+        "secureData": {
+          "properties": ["inputs", "outputs"]
+        }
+      }
+    },
+    "If_digest_topic": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@and(not(startsWith(outputs('Digest_topic'), 'RE:')), not(startsWith(outputs('Digest_topic'), 'FW:')), not(startsWith(outputs('Digest_topic'), 'FWD:')), greater(indexOf(replace(outputs('Digest_topic'), '“', '\"'), ' shared \"'), 0), endsWith(replace(outputs('Digest_topic'), '”', '\"'), '\" with you'))",
+              true
+            ]
+          }
+        ]
+      },
+      "runAfter": {
+        "Digest_topic": ["Succeeded"]
+      },
+      "actions": {
+        "For_each_thread": {
+          "type": "Foreach",
+          "foreach": "@coalesce(triggerBody()?['threads'], json('[]'))",
+          "runAfter": {},
+          "actions": {
+            "For_each_post": {
+              "type": "Foreach",
+              "foreach": "@coalesce(items('For_each_thread')?['posts'], json('[]'))",
+              "runAfter": {},
+              "actions": {
+                "Get_group_post": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365groupsmail",
+                      "connection": "shared_office365groupsmail",
+                      "operationId": "GetThreadPost"
+                    },
+                    "parameters": {
+                      "groupId": "@parameters('GroupId')",
+                      "threadId": "@items('For_each_thread')?['id']",
+                      "postId": "@items('For_each_post')?['id']"
+                    }
+                  },
+                  "runAfter": {},
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": ["inputs", "outputs"]
+                    }
+                  }
+                },
+                "Source_sender": {
+                  "type": "Compose",
+                  "inputs": "@toLower(trim(coalesce(body('Get_group_post')?['sender']?['emailAddress']?['address'], '')))",
+                  "runAfter": {
+                    "Get_group_post": ["Succeeded"]
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": ["inputs", "outputs"]
+                    }
+                  }
+                },
+                "If_Bond_digest": {
+                  "type": "If",
+                  "expression": {
+                    "and": [
+                      {
+                        "equals": [
+                          "@and(endsWith(outputs('Source_sender'), '@bond.edu.au'), contains(toLower(coalesce(body('Get_group_post')?['body']?['content'], '')), 'microsoft 365'), contains(toLower(coalesce(body('Get_group_post')?['body']?['content'], '')), 'bonduni.sharepoint.com'))",
+                          true
+                        ]
+                      }
+                    ]
+                  },
+                  "runAfter": {
+                    "Source_sender": ["Succeeded"]
+                  },
+                  "actions": {
+                    "Format_digest": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_excelonlinebusiness",
+                          "connection": "shared_excelonlinebusiness",
+                          "operationId": "RunScriptProd"
+                        },
+                        "parameters": {
+                          "source": "me",
+                          "drive": "@parameters('WorkbookDriveId')",
+                          "file": "@parameters('WorkbookId')",
+                          "scriptId": "@parameters('ScriptId')",
+                          "ScriptParameters/sourceHtml": "@coalesce(body('Get_group_post')?['body']?['content'], '')",
+                          "ScriptParameters/sourceAttachments": "@string(coalesce(body('Get_group_post')?['attachments'], json('[]')))",
+                          "ScriptParameters/mailbox": "@outputs('Source_sender')",
+                          "ScriptParameters/brisbaneDate": "@convertTimeZone(utcNow(), 'UTC', 'E. Australia Standard Time', 'yyyy-MM-dd')",
+                          "ScriptParameters/careersWeekday": "@parameters('CareersWeekday')"
+                        }
+                      },
+                      "runAfter": {},
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": ["inputs", "outputs"]
+                        }
+                      }
+                    },
+                    "Claim_post": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_excelonlinebusiness",
+                          "connection": "shared_excelonlinebusiness",
+                          "operationId": "RunScriptProd"
+                        },
+                        "parameters": {
+                          "source": "me",
+                          "drive": "@parameters('WorkbookDriveId')",
+                          "file": "@parameters('WorkbookId')",
+                          "scriptId": "@parameters('StateScriptId')",
+                          "ScriptParameters/postId": "@items('For_each_post')?['id']",
+                          "ScriptParameters/recordProcessed": false
+                        },
+                        "retryPolicy": {
+                          "type": "none"
+                        }
+                      },
+                      "runAfter": {
+                        "Format_digest": ["Succeeded"]
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": ["inputs", "outputs"]
+                        }
+                      }
+                    },
+                    "If_claimed": {
+                      "type": "If",
+                      "expression": {
+                        "and": [
+                          {
+                            "equals": ["@body('Claim_post')?['result']", true]
+                          }
+                        ]
+                      },
+                      "runAfter": {
+                        "Claim_post": ["Succeeded"]
+                      },
+                      "actions": {
+                        "Create_draft": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                              "connection": "shared_office365",
+                              "operationId": "HttpRequest"
+                            },
+                            "parameters": {
+                              "Uri": "https://graph.microsoft.com/v1.0/me/messages",
+                              "Method": "POST",
+                              "ContentType": "application/json",
+                              "Body": "@body('Format_digest')?['result']"
+                            },
+                            "retryPolicy": {
+                              "type": "none"
+                            }
+                          },
+                          "runAfter": {},
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": ["inputs", "outputs"]
+                            }
+                          }
+                        },
+                        "Send_draft": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+                              "connection": "shared_office365",
+                              "operationId": "SendDraftEmail"
+                            },
+                            "parameters": {
+                              "messageId": "@body('Create_draft')?['id']"
+                            },
+                            "retryPolicy": {
+                              "type": "none"
+                            }
+                          },
+                          "runAfter": {
+                            "Create_draft": ["Succeeded"]
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": ["inputs", "outputs"]
+                            }
+                          }
+                        },
+                        "Record_processed": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_excelonlinebusiness",
+                              "connection": "shared_excelonlinebusiness",
+                              "operationId": "RunScriptProd"
+                            },
+                            "parameters": {
+                              "source": "me",
+                              "drive": "@parameters('WorkbookDriveId')",
+                              "file": "@parameters('WorkbookId')",
+                              "scriptId": "@parameters('StateScriptId')",
+                              "ScriptParameters/postId": "@items('For_each_post')?['id']",
+                              "ScriptParameters/recordProcessed": true
+                            }
+                          },
+                          "runAfter": {
+                            "Send_draft": ["Succeeded"]
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": ["inputs", "outputs"]
+                            }
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {}
+      }
+    }
+  },
+  "outputs": {}
+}

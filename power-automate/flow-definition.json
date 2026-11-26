@@ -1,0 +1,227 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "Mailbox": {
+      "type": "String"
+    },
+    "CareersWeekday": {
+      "type": "String",
+      "defaultValue": "Wednesday"
+    },
+    "WorkbookDriveId": {
+      "type": "String"
+    },
+    "WorkbookId": {
+      "type": "String"
+    },
+    "ScriptId": {
+      "type": "String"
+    }
+  },
+  "triggers": {
+    "On_new_email": {
+      "type": "OpenApiConnectionNotification",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+          "connection": "shared_office365",
+          "operationId": "OnNewEmailV3"
+        },
+        "parameters": {
+          "folderPath": "Inbox",
+          "from": "@parameters('Mailbox')",
+          "to": "@parameters('Mailbox')",
+          "includeAttachments": false,
+          "fetchOnlyWithAttachment": false
+        }
+      },
+      "splitOn": "@triggerOutputs()?['body/value']",
+      "conditions": [
+        {
+          "expression": "@and(not(startsWith(trim(coalesce(triggerBody()?['subject'], '')), 'RE:')), not(startsWith(trim(coalesce(triggerBody()?['subject'], '')), 'FW:')), not(startsWith(trim(coalesce(triggerBody()?['subject'], '')), 'FWD:')), greater(indexOf(replace(trim(coalesce(triggerBody()?['subject'], '')), '“', '\"'), ' shared \"'), 0), endsWith(replace(trim(coalesce(triggerBody()?['subject'], '')), '”', '\"'), '\" with you'))"
+        }
+      ],
+      "runtimeConfiguration": {
+        "concurrency": {
+          "runs": 1
+        },
+        "secureData": {
+          "properties": ["outputs"]
+        }
+      }
+    }
+  },
+  "actions": {
+    "Get_source": {
+      "type": "OpenApiConnection",
+      "inputs": {
+        "host": {
+          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+          "connection": "shared_office365",
+          "operationId": "GetEmailV2"
+        },
+        "parameters": {
+          "messageId": "@triggerBody()?['id']",
+          "includeAttachments": false
+        }
+      },
+      "runAfter": {},
+      "runtimeConfiguration": {
+        "secureData": {
+          "properties": ["inputs", "outputs"]
+        }
+      }
+    },
+    "If_unread_digest": {
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": ["@body('Get_source')?['isRead']", false]
+          },
+          {
+            "contains": ["@toLower(coalesce(body('Get_source')?['body'], ''))", "microsoft 365"]
+          },
+          {
+            "contains": [
+              "@toLower(coalesce(body('Get_source')?['body'], ''))",
+              "bonduni.sharepoint.com"
+            ]
+          }
+        ]
+      },
+      "runAfter": {
+        "Get_source": ["Succeeded"]
+      },
+      "actions": {
+        "List_attachments": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connection": "shared_office365",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "Uri": "@concat('https://graph.microsoft.com/v1.0/me/messages/', uriComponent(triggerBody()?['id']), '/attachments?$top=100')",
+              "Method": "GET"
+            }
+          },
+          "runAfter": {},
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": ["inputs", "outputs"]
+            }
+          }
+        },
+        "Format_digest": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_excelonlinebusiness",
+              "connection": "shared_excelonlinebusiness",
+              "operationId": "RunScriptProd"
+            },
+            "parameters": {
+              "source": "me",
+              "drive": "@parameters('WorkbookDriveId')",
+              "file": "@parameters('WorkbookId')",
+              "scriptId": "@parameters('ScriptId')",
+              "ScriptParameters/sourceHtml": "@coalesce(body('Get_source')?['body'], '')",
+              "ScriptParameters/sourceAttachments": "@string(coalesce(body('List_attachments')?['value'], json('[]')))",
+              "ScriptParameters/mailbox": "@parameters('Mailbox')",
+              "ScriptParameters/brisbaneDate": "@convertTimeZone(utcNow(), 'UTC', 'E. Australia Standard Time', 'yyyy-MM-dd')",
+              "ScriptParameters/careersWeekday": "@parameters('CareersWeekday')"
+            }
+          },
+          "runAfter": {
+            "List_attachments": ["Succeeded"]
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": ["inputs", "outputs"]
+            }
+          }
+        },
+        "Create_draft": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connection": "shared_office365",
+              "operationId": "HttpRequest"
+            },
+            "parameters": {
+              "Uri": "https://graph.microsoft.com/v1.0/me/messages",
+              "Method": "POST",
+              "ContentType": "application/json",
+              "Body": "@body('Format_digest')?['result']"
+            },
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runAfter": {
+            "Format_digest": ["Succeeded"]
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": ["inputs", "outputs"]
+            }
+          }
+        },
+        "Send_draft": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connection": "shared_office365",
+              "operationId": "SendDraftEmail"
+            },
+            "parameters": {
+              "messageId": "@body('Create_draft')?['id']"
+            },
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runAfter": {
+            "Create_draft": ["Succeeded"]
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": ["inputs", "outputs"]
+            }
+          }
+        },
+        "Mark_source_read": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365",
+              "connection": "shared_office365",
+              "operationId": "MarkAsRead_V3"
+            },
+            "parameters": {
+              "messageId": "@triggerBody()?['id']",
+              "isRead": true
+            }
+          },
+          "runAfter": {
+            "Send_draft": ["Succeeded"]
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": ["inputs", "outputs"]
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {}
+      }
+    }
+  },
+  "outputs": {}
+}
