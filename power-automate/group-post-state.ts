@@ -1,7 +1,8 @@
 // Reserve a group post before sending and record completion after Outlook accepts the draft.
 // One flow with sequential runs owns this worksheet.
 
-const worksheetName = "Digest Bot Group Posts";
+const worksheetName = "Digest Bot Log";
+const previousWorksheetName = "Digest Bot Group Posts";
 const headers = ["Post key", "State", "Updated UTC"];
 const pending = "Pending";
 const processed = "Processed";
@@ -12,6 +13,17 @@ function main(workbook: ExcelScript.Workbook, postId: string, recordProcessed: b
   // A fixed prefix makes every ID an Excel text value, including IDs that start with a symbol.
   const key = "post:" + postId;
   let sheet = workbook.getWorksheet(worksheetName);
+  const previousSheet = workbook.getWorksheet(previousWorksheetName);
+  if (previousSheet) {
+    if (sheet) {
+      throw new Error(
+        `Both ${worksheetName} and ${previousWorksheetName} exist. Reconcile the log sheets before running the flow.`,
+      );
+    }
+    // Keep the existing claims so a rename cannot make old posts eligible for sending again.
+    previousSheet.setName(worksheetName);
+    sheet = previousSheet;
+  }
   if (!sheet) {
     if (recordProcessed) throw new Error("The group post was never claimed.");
     sheet = workbook.addWorksheet(worksheetName);
@@ -32,7 +44,7 @@ function main(workbook: ExcelScript.Workbook, postId: string, recordProcessed: b
     used.getColumnCount() !== headers.length ||
     !headers.every((header, column) => rows[0][column] === header)
   ) {
-    throw new Error("Check the headers on the Digest Bot Group Posts worksheet.");
+    throw new Error(`Check the headers on the ${worksheetName} worksheet.`);
   }
 
   const index = rows.findIndex((row) => row[0] === key);

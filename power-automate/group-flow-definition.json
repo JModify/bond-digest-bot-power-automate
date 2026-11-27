@@ -12,11 +12,23 @@
       "type": "String",
       "defaultValue": "Wednesday"
     },
+    "WorkbookSiteUrl": {
+      "type": "String",
+      "metadata": {
+        "description": "CSS SharePoint site URL"
+      }
+    },
     "WorkbookDriveId": {
-      "type": "String"
+      "type": "String",
+      "metadata": {
+        "description": "Drive ID of the Documents library on the CSS SharePoint site"
+      }
     },
     "WorkbookId": {
-      "type": "String"
+      "type": "String",
+      "metadata": {
+        "description": "File ID of General/Digest Bot - Power Automate Script.xlsx"
+      }
     },
     "ScriptId": {
       "type": "String"
@@ -170,7 +182,7 @@
                           "operationId": "RunScriptProd"
                         },
                         "parameters": {
-                          "source": "me",
+                          "source": "@parameters('WorkbookSiteUrl')",
                           "drive": "@parameters('WorkbookDriveId')",
                           "file": "@parameters('WorkbookId')",
                           "scriptId": "@parameters('ScriptId')",
@@ -197,7 +209,7 @@
                           "operationId": "RunScriptProd"
                         },
                         "parameters": {
-                          "source": "me",
+                          "source": "@parameters('WorkbookSiteUrl')",
                           "drive": "@parameters('WorkbookDriveId')",
                           "file": "@parameters('WorkbookId')",
                           "scriptId": "@parameters('StateScriptId')",
@@ -288,7 +300,7 @@
                               "operationId": "RunScriptProd"
                             },
                             "parameters": {
-                              "source": "me",
+                              "source": "@parameters('WorkbookSiteUrl')",
                               "drive": "@parameters('WorkbookDriveId')",
                               "file": "@parameters('WorkbookId')",
                               "scriptId": "@parameters('StateScriptId')",

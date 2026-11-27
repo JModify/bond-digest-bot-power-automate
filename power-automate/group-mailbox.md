@@ -2,7 +2,7 @@
 
 In SharePoint, choose **Email a news digest** with any title and send it to **sdc@groups.bond.edu.au**. The flow watches the group's own mailbox. It reads the original sender from the group post and sends the formatted digest from **bondstaffnews@bond.edu.au** to that sender's `@bond.edu.au` address. Group members can keep inbox copies turned off.
 
-Microsoft exposes a group email trigger and actions for conversations, threads and posts. The supported group actions have no **Mark as read** operation. This flow records the source post as **Processed** in **Digest Bot.xlsx** after Outlook accepts the send. The group's Outlook read indicator requires a manual action. [Groups Mail connector](https://learn.microsoft.com/en-us/connectors/office365groupsmail/) · [Microsoft Graph group post operations](https://learn.microsoft.com/en-us/graph/api/resources/post)
+Microsoft exposes a group email trigger and actions for conversations, threads and posts. The supported group actions have no **Mark as read** operation. After Outlook accepts the send, this flow records the source post as **Processed** on the **Digest Bot Log** worksheet in **Digest Bot - Power Automate Script.xlsx**. The group's Outlook read indicator requires a manual action. [Groups Mail connector](https://learn.microsoft.com/en-us/connectors/office365groupsmail/) · [Microsoft Graph group post operations](https://learn.microsoft.com/en-us/graph/api/resources/post)
 
 ```mermaid
 flowchart TD
@@ -16,9 +16,11 @@ flowchart TD
 
 ## 1. Prepare the workbook and connections
 
-1. Open **Digest Bot.xlsx** in Bond OneDrive for Business and use the existing **Format Bond Staff News** Office Script. If you need to create the workbook or script, follow [Save the Office Script](README.md#1-save-the-office-script).
-2. In Excel for the web, select **Automate → New Script**. Paste [group-post-state.ts](group-post-state.ts) from its raw view, name the script **Track Digest Bot Group Posts**, and save it. The script creates a worksheet named **Digest Bot Group Posts** on its first claim. The worksheet records post IDs, states and timestamps.
+1. Open **CSS SharePoint → Documents → General → Digest Bot - Power Automate Script.xlsx** in Excel for the web. The flow uses **Format Bond Staff News** and **Track Digest Bot Group Posts** from the workbook's **Automate** tab. [Format script setup](README.md#1-save-the-office-script)
+2. To update the log script, open **Track Digest Bot Group Posts** in the code editor, replace its code with the raw contents of [group-post-state.ts](group-post-state.ts), and save it. If the script is missing, create it under **Automate → New Script**, save it as **Track Digest Bot Group Posts**, and associate it with the workbook.
 3. Sign in to [Power Automate](https://make.powerautomate.com) in Bond's environment. Use a Bond account with access to the SDC group and workbook. Use an Outlook connection with **Send As** permission for `bondstaffnews@bond.edu.au` on both `Create_draft` and `Send_draft`. [Microsoft Graph delegated sending](https://learn.microsoft.com/en-us/graph/outlook-send-mail-from-other-user)
+
+On its next run, the updated log script renames the existing **Digest Bot Group Posts** worksheet to **Digest Bot Log**, preserving its rows. If no log exists, the first claim creates **Digest Bot Log**. If both tabs exist, review both histories before consolidating them into one log.
 
 ## 2. Read the group conversation
 
@@ -69,7 +71,16 @@ Inside **True** of `If_Bond_digest`, add these three cards.
 
 ### Format_digest
 
-Add **Excel Online (Business) → Run script**. Select **OneDrive for Business → OneDrive → Digest Bot.xlsx** and choose **Format Bond Staff News**.
+Add **Excel Online (Business) → Run script**. Use the CSS SharePoint workbook for `Format_digest`, `Claim_post` and `Record_processed`.
+
+| Field | Value |
+| --- | --- |
+| Location | **CSS SharePoint** site |
+| Document Library | **Documents** |
+| File | **General → Digest Bot - Power Automate Script.xlsx** |
+| Script | **Format Bond Staff News** |
+
+If the Office Script files (`.osts`) are saved in SharePoint, use **Run script from SharePoint library** and select each script's location in the separate script fields. Use the same workbook settings above. [Excel connector](https://learn.microsoft.com/en-us/office/dev/scripts/develop/power-automate-integration#excel-connector)
 
 | Script input | Value |
 | --- | --- |
@@ -119,7 +130,7 @@ Keep these actions in sequence with **Run after** set to success. Set **Retry po
 ## 6. Test the switch to the group
 
 1. Ask another Bond user to send an approved SharePoint test digest to **sdc@groups.bond.edu.au** with a title such as **Campus Updates**.
-2. In **Run history**, check that `Create_draft` and `Send_draft` succeed. Ask the recipient to verify **From** is `bondstaffnews@bond.edu.au` and the inline images appear. Check that the source post is **Processed** in **Digest Bot.xlsx**.
+2. In **Run history**, check that `Create_draft` and `Send_draft` succeed. Ask the recipient to verify **From** is `bondstaffnews@bond.edu.au` and the inline images appear. Check that the source post is **Processed** on **Digest Bot Log**.
 3. Turn off the old personal Inbox flow so the group is the sole intake. A digest sent only to a personal inbox should produce no group run.
 
 ### If the formatted email stays in Drafts

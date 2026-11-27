@@ -13,9 +13,7 @@ const flow = JSON.parse(
   readFileSync(new URL("../power-automate/group-flow-definition.json", import.meta.url), "utf8"),
 );
 
-function workbookFixture() {
-  const rows = [];
-  let hasSheet = false;
+function workbookFixture(sheetName, rows = []) {
   function setCells(row, column, values) {
     for (const [offset, entries] of values.entries()) {
       const target = (rows[row + offset] ??= []);
@@ -23,6 +21,10 @@ function workbookFixture() {
     }
   }
   const sheet = {
+    setName: (name) => {
+      assert.ok(sheetName);
+      sheetName = name;
+    },
     getUsedRange: () =>
       rows.length
         ? {
@@ -45,11 +47,10 @@ function workbookFixture() {
     }),
   };
   const workbook = {
-    getWorksheet: () => (hasSheet ? sheet : undefined),
+    getWorksheet: (name) => (name === sheetName ? sheet : undefined),
     addWorksheet: (name) => {
-      assert.equal(hasSheet, false);
-      assert.equal(name, "Digest Bot Group Posts");
-      hasSheet = true;
+      assert.equal(sheetName, undefined);
+      sheetName = name;
       return sheet;
     },
   };
@@ -61,6 +62,7 @@ test("claims each group post once and records processing after delivery", () => 
   const firstPost = "+example/group/post-A=";
   const secondPost = "example/group/post-B=";
   assert.equal(track(workbook, firstPost, false), true);
+  assert.ok(workbook.getWorksheet("Digest Bot Log"));
   assert.deepEqual(rows[0], ["Post key", "State", "Updated UTC"]);
   assert.deepEqual(rows[1].slice(0, 2), ["post:" + firstPost, "Pending"]);
   assert.equal(track(workbook, firstPost, false), false);
@@ -90,6 +92,36 @@ test("requires an existing claim to finish processing and preserves unrelated wo
   assert.equal(rows.length, 2);
 });
 
+test("renames the existing worksheet and preserves duplicate protection", () => {
+  const previousName = "Digest Bot Group Posts";
+  const { rows, workbook } = workbookFixture(previousName, [
+    ["Post key", "State", "Updated UTC"],
+    ["post:old-processed", "Processed", "2026-11-27T01:00:00.000Z"],
+    ["post:old-pending", "Pending", "2026-11-27T01:01:00.000Z"],
+  ]);
+  const originalSheet = workbook.getWorksheet(previousName);
+  const originalRows = structuredClone(rows);
+  assert.equal(track(workbook, "old-processed", false), false);
+  assert.equal(workbook.getWorksheet("Digest Bot Log"), originalSheet);
+  assert.equal(workbook.getWorksheet(previousName), undefined);
+  assert.equal(track(workbook, "old-pending", false), false);
+  assert.deepEqual(rows, originalRows);
+  assert.equal(track(workbook, "old-pending", true), true);
+  assert.equal(rows[2][1], "Processed");
+});
+
+test("stops when both log worksheets exist", () => {
+  const { workbook: current } = workbookFixture("Digest Bot Log");
+  const { workbook: previous } = workbookFixture("Digest Bot Group Posts");
+  const workbook = {
+    getWorksheet: (name) => current.getWorksheet(name) ?? previous.getWorksheet(name),
+  };
+  assert.throws(
+    () => track(workbook, "example-post", false),
+    /Both Digest Bot Log and Digest Bot Group Posts exist/,
+  );
+});
+
 test("the group flow sends formatted digests from Bond Staff News to the original sender", () => {
   const groupApi = "/providers/Microsoft.PowerApps/apis/shared_office365groupsmail";
   const groupId = "@parameters('GroupId')";
@@ -100,6 +132,12 @@ test("the group flow sends formatted digests from Bond Staff News to the origina
   const { Get_group_post, Source_sender, If_Bond_digest } = postLoop.actions;
   const { Format_digest, Claim_post, If_claimed } = If_Bond_digest.actions;
   const { Create_draft, Send_draft, Record_processed } = If_claimed.actions;
+
+  for (const { inputs: { parameters } } of [Format_digest, Claim_post, Record_processed]) {
+    assert.equal(parameters.source, "@parameters('WorkbookSiteUrl')");
+    assert.equal(parameters.drive, "@parameters('WorkbookDriveId')");
+    assert.equal(parameters.file, "@parameters('WorkbookId')");
+  }
 
   assert.deepEqual(Object.keys(flow.triggers), ["On_group_email"]);
   assert.equal(On_group_email.inputs.host.operationId, "OnNewEmailInGroup");

@@ -17,14 +17,14 @@ The workflow uses the **Office 365 Outlook** and **Excel Online (Business)** con
 
 ## Check whether Bond enables it
 
-1. Open **Excel for the web** with your Bond account. In a new workbook, look for **Automate → New Script**.
+1. Open **Digest Bot - Power Automate Script.xlsx** from **CSS SharePoint → Documents → General** in **Excel for the web** with your Bond account. Check that the **Automate** tab is available.
 2. In your Bond Power Automate environment, check for **Excel Online (Business) → Run script** and **Office 365 Outlook**. Both are standard connectors. Office Scripts still requires a supported Microsoft 365 licence and the ability to run scripts in that environment. The saved flow must also satisfy Bond’s data policies. [Office Scripts requirements](https://learn.microsoft.com/en-us/office/dev/scripts/testing/platform-limits) · [Excel connector](https://learn.microsoft.com/en-us/connectors/excelonlinebusiness/) · [Outlook connector](https://learn.microsoft.com/en-us/connectors/office365/) · [Power Platform data policies](https://learn.microsoft.com/en-us/power-platform/admin/wp-data-loss-prevention)
 
 ## 1. Save the Office Script
 
-1. Save a blank workbook named **Digest Bot.xlsx** in your Bond OneDrive for Business. Keep editing access limited to the people who maintain the flow.
-2. Open the workbook in Excel for the web. Select **Automate → New Script**. Open the raw view of [format-staff-news.ts](format-staff-news.ts), copy the complete script, and replace the sample code in the editor.
-3. Name the script **Format Bond Staff News** and save it. The script uses its input fields when Power Automate runs it. [Pass data to and from Office Scripts](https://learn.microsoft.com/en-us/office/dev/scripts/develop/power-automate-parameters-returns)
+1. In **CSS SharePoint → Documents → General → Digest Bot - Power Automate Script.xlsx**, open **Automate** and select **Format Bond Staff News**.
+2. To update the script, open its code editor, replace the code with the raw contents of [format-staff-news.ts](format-staff-news.ts), and save it.
+3. If the script is missing, select **Automate → New Script**, paste the same code, and save it as **Format Bond Staff News**. Turn on **Associate with workbook** to make it available from the workbook. [Associate an Office Script with a workbook](https://learn.microsoft.com/en-us/office/dev/scripts/develop/script-buttons)
 
 ## 2. Build the flow card by card
 
@@ -115,10 +115,12 @@ Click **+** below `List_attachments` inside **True**. Add **Excel Online (Busine
 
 | Field | Value |
 | --- | --- |
-| Location | **OneDrive for Business** |
-| Document Library | **OneDrive** |
-| File | **Digest Bot.xlsx** |
+| Location | **CSS SharePoint** site |
+| Document Library | **Documents** |
+| File | **General → Digest Bot - Power Automate Script.xlsx** |
 | Script | **Format Bond Staff News** |
+
+If the Office Script file (`.osts`) is saved in SharePoint, use **Run script from SharePoint library** and select its location in the separate script fields. Use the same workbook settings above. [Excel connector](https://learn.microsoft.com/en-us/office/dev/scripts/develop/power-automate-integration#excel-connector)
 
 | Script input | Value |
 | --- | --- |

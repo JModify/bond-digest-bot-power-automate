@@ -11,12 +11,14 @@ Format SharePoint news digests inside Bond Microsoft 365. Power Automate reads t
 
 Both guides walk through the Power Automate cards and list the expressions to paste into the designer. Use your Bond account for the connections and workbook.
 
+The flows use the Office Scripts available under **Automate** in **CSS SharePoint → Documents → General → Digest Bot - Power Automate Script.xlsx**. The group flow records processed emails on the **Digest Bot Log** worksheet.
+
 ## Source files
 
 | File | Purpose |
 | --- | --- |
 | [format-staff-news.ts](power-automate/format-staff-news.ts) | Parses a SharePoint digest and builds the formatted Outlook draft with inline images. |
-| [group-post-state.ts](power-automate/group-post-state.ts) | Records the group post IDs that the flow has claimed or processed. |
+| [group-post-state.ts](power-automate/group-post-state.ts) | Records claimed and processed group posts in **Digest Bot Log**. |
 | [group-flow-definition.json](power-automate/group-flow-definition.json) | Card wiring reference for the group mailbox flow. |
 | [flow-definition.json](power-automate/flow-definition.json) | Card wiring reference for the personal mailbox flow. |
 | [assets](assets) | Source PNGs embedded in the formatting script. |
