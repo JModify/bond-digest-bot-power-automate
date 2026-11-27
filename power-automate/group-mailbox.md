@@ -94,6 +94,8 @@ Add **Control → Condition** below `Claim_post`. Set the left field to **fx** `
 
 ## 5. Send the draft and record completion
 
+The Outlook connection owns the draft and sends the reply. `Format_digest` sets the **To** address from `Source_sender`, so the original sender receives the formatted copy. `Send_draft` sends the draft with its inline images. [Create a message draft](https://learn.microsoft.com/en-us/graph/api/user-post-messages) · [Send a draft](https://learn.microsoft.com/en-us/connectors/office365connector/#send-a-draft-message)
+
 Add these cards inside **True** of `If_claimed`.
 
 | Order | Card | Settings |
@@ -106,11 +108,17 @@ Keep these actions in sequence with **Run after** set to success. Set **Retry po
 
 ## 6. Test the switch to the group
 
-1. Send an approved SharePoint digest to **sdc@groups.bond.edu.au** with a title such as **Campus Updates**.
-2. In **Run history**, check whether `Get_group_post` and `Send_draft` succeed. Verify that the formatted copy arrives in the original sender's Bond inbox and that the post is **Processed** in **Digest Bot.xlsx**.
+1. Ask another Bond user to send an approved SharePoint test digest to **sdc@groups.bond.edu.au** with a title such as **Campus Updates**.
+2. In **Run history**, check that `Create_draft` and `Send_draft` succeed. Confirm that the reply in the connected mailbox's **Sent Items** is addressed to that user, that their copy shows the inline images, and that the post is **Processed** in **Digest Bot.xlsx**.
 3. Turn off the old personal Inbox flow so the group is the sole intake. A digest sent only to a personal inbox should produce no group run.
 
-A **Pending** row means that the flow claimed the post and has no recorded send result. Check **Sent Items** and **Drafts** for the connected mailbox before retrying. If the send failed, submit a fresh digest from SharePoint.
+### If the formatted email stays in Drafts
+
+1. In **Run history**, open the run that created the draft. Expand the **True** branch under `If_claimed`. `Send_draft` must be the **Office 365 Outlook → Send a Draft message** action immediately after `Create_draft`.
+2. Set **Message Id** to **fx** `body('Create_draft')?['id']`, then confirm both cards use the same Outlook connection and **Run after** is set to **is successful** on `Create_draft`.
+3. If the draft's **To** address is wrong, check that `Source_sender` reads the sender of `Get_group_post` and that the `mailbox` field in `Format_digest` uses **fx** `outputs('Source_sender')`.
+
+A claimed post stays **Pending** until the flow records a successful send. Check **Sent Items** and **Drafts** to see what happened. After fixing the flow, send a fresh SharePoint test digest. The existing post ID has already been claimed.
 
 If the Outlook read flag is essential, Bond ITS can provision an **Exchange shared mailbox** as the intake. That mailbox type supports the **When a new email arrives in a shared mailbox (V2)** trigger and **Mark as read or unread (V3)** with the shared mailbox address. [Shared mailbox administration](https://learn.microsoft.com/en-us/microsoft-365/admin/email/create-a-shared-mailbox) · [Outlook connector](https://learn.microsoft.com/en-us/connectors/office365/)
 
