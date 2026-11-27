@@ -90,7 +90,7 @@ test("requires an existing claim to finish processing and preserves unrelated wo
   assert.equal(rows.length, 2);
 });
 
-test("the group flow reads only the selected group and sends each post to its Bond sender", () => {
+test("the group flow sends formatted digests from Bond Staff News to the original sender", () => {
   const groupApi = "/providers/Microsoft.PowerApps/apis/shared_office365groupsmail";
   const groupId = "@parameters('GroupId')";
   const { On_group_email } = flow.triggers;
@@ -130,6 +130,12 @@ test("the group flow reads only the selected group and sends each post to its Bo
   assert.deepEqual(If_claimed.expression.and[0].equals, ["@body('Claim_post')?['result']", true]);
   assert.deepEqual(Object.keys(If_claimed.else.actions), []);
   assert.equal(Create_draft.inputs.parameters.Uri, "https://graph.microsoft.com/v1.0/me/messages");
+  const from = JSON.stringify({ emailAddress: { address: "bondstaffnews@bond.edu.au" } });
+  assert.equal(
+    Create_draft.inputs.parameters.Body,
+    `@string(setProperty(json(body('Format_digest')?['result']), 'from', json('${from}')))`,
+  );
+  assert.deepEqual(Send_draft.runAfter, { Create_draft: ["Succeeded"] });
   assert.equal(Send_draft.inputs.parameters.messageId, "@body('Create_draft')?['id']");
   assert.deepEqual(Record_processed.runAfter, { Send_draft: ["Succeeded"] });
   assert.equal(Record_processed.inputs.parameters["ScriptParameters/recordProcessed"], true);

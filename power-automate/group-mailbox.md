@@ -1,6 +1,6 @@
 # Send a digest to the SDC Microsoft 365 group
 
-In SharePoint, choose **Email a news digest** with any title and send it to **sdc@groups.bond.edu.au**. The flow watches the group's own mailbox. It reads the sender from the group post and returns the formatted digest to that `@bond.edu.au` address through the flow's Bond Outlook connection. Group members can keep inbox copies turned off.
+In SharePoint, choose **Email a news digest** with any title and send it to **sdc@groups.bond.edu.au**. The flow watches the group's own mailbox. It reads the original sender from the group post and sends the formatted digest from **bondstaffnews@bond.edu.au** to that sender's `@bond.edu.au` address. Group members can keep inbox copies turned off.
 
 Microsoft exposes a group email trigger and actions for conversations, threads and posts. The supported group actions have no **Mark as read** operation. This flow records the source post as **Processed** in **Digest Bot.xlsx** after Outlook accepts the send. The group's Outlook read indicator requires a manual action. [Groups Mail connector](https://learn.microsoft.com/en-us/connectors/office365groupsmail/) · [Microsoft Graph group post operations](https://learn.microsoft.com/en-us/graph/api/resources/post)
 
@@ -18,7 +18,7 @@ flowchart TD
 
 1. Open **Digest Bot.xlsx** in Bond OneDrive for Business and use the existing **Format Bond Staff News** Office Script. If you need to create the workbook or script, follow [Save the Office Script](README.md#1-save-the-office-script).
 2. In Excel for the web, select **Automate → New Script**. Paste [group-post-state.ts](group-post-state.ts) from its raw view, name the script **Track Digest Bot Group Posts**, and save it. The script creates a worksheet named **Digest Bot Group Posts** on its first claim. The worksheet records post IDs, states and timestamps.
-3. Sign in to [Power Automate](https://make.powerautomate.com) in Bond's environment. Use a Bond account with access to the SDC group, the workbook and an Outlook mailbox for sending.
+3. Sign in to [Power Automate](https://make.powerautomate.com) in Bond's environment. Use a Bond account with access to the SDC group and workbook. Use an Outlook connection with **Send As** permission for `bondstaffnews@bond.edu.au` on both `Create_draft` and `Send_draft`. [Microsoft Graph delegated sending](https://learn.microsoft.com/en-us/graph/outlook-send-mail-from-other-user)
 
 ## 2. Read the group conversation
 
@@ -94,22 +94,32 @@ Add **Control → Condition** below `Claim_post`. Set the left field to **fx** `
 
 ## 5. Send the draft and record completion
 
-The Outlook connection owns the draft and sends the reply. `Format_digest` sets the **To** address from `Source_sender`, so the original sender receives the formatted copy. `Send_draft` sends the draft with its inline images. [Create a message draft](https://learn.microsoft.com/en-us/graph/api/user-post-messages) · [Send a draft](https://learn.microsoft.com/en-us/connectors/office365connector/#send-a-draft-message)
+The Outlook connection creates the draft in its own mailbox. `Create_draft` sets **From** to `bondstaffnews@bond.edu.au`, and `Format_digest` supplies the original sender as **To**. `Send_draft` sends the formatted HTML and inline images together. [Create a message draft](https://learn.microsoft.com/en-us/graph/api/user-post-messages) · [Send a draft](https://learn.microsoft.com/en-us/connectors/office365connector/#send-a-draft-message)
 
 Add these cards inside **True** of `If_claimed`.
 
 | Order | Card | Settings |
 | --- | --- | --- |
-| 1 | **Office 365 Outlook → Send an HTTP request** as `Create_draft` | **Method** `POST`. **URI** `https://graph.microsoft.com/v1.0/me/messages`. **Content-Type** `application/json`. **Body** is **fx** `body('Format_digest')?['result']`. |
+| 1 | **Office 365 Outlook → Send an HTTP request** as `Create_draft` | **Method** `POST`. **URI** `https://graph.microsoft.com/v1.0/me/messages`. **Content-Type** `application/json`. Paste the expression below into **Body → fx**. |
 | 2 | **Office 365 Outlook → Send a Draft message** as `Send_draft` | **Message Id** is **fx** `body('Create_draft')?['id']`. Use the same Bond Outlook connection as `Create_draft`. |
 | 3 | **Excel Online (Business) → Run script** as `Record_processed` | Same workbook, script **Track Digest Bot Group Posts**. **postId** is **fx** `items('For_each_post')?['id']`. **recordProcessed** is **fx** `true` or **Yes**. |
+
+To update an existing group flow, open **True** under `If_claimed` and replace the **Body** expression in `Create_draft` with this.
+
+```text
+string(setProperty(
+  json(body('Format_digest')?['result']),
+  'from',
+  json('{"emailAddress":{"address":"bondstaffnews@bond.edu.au"}}')
+))
+```
 
 Keep these actions in sequence with **Run after** set to success. Set **Retry policy** to **None** on `Create_draft` and `Send_draft` to avoid repeating a send with an uncertain result. Enable **Secure inputs** and **Secure outputs** where available on cards that handle digest contents. Save the flow. [Outlook connector](https://learn.microsoft.com/en-us/connectors/office365/) · [Secure data in cloud flows](https://learn.microsoft.com/en-us/power-automate/guidance/coding-guidelines/use-secure-inputs-outputs-triggers)
 
 ## 6. Test the switch to the group
 
 1. Ask another Bond user to send an approved SharePoint test digest to **sdc@groups.bond.edu.au** with a title such as **Campus Updates**.
-2. In **Run history**, check that `Create_draft` and `Send_draft` succeed. Confirm that the reply in the connected mailbox's **Sent Items** is addressed to that user, that their copy shows the inline images, and that the post is **Processed** in **Digest Bot.xlsx**.
+2. In **Run history**, check that `Create_draft` and `Send_draft` succeed. Ask the recipient to verify **From** is `bondstaffnews@bond.edu.au` and the inline images appear. Check that the source post is **Processed** in **Digest Bot.xlsx**.
 3. Turn off the old personal Inbox flow so the group is the sole intake. A digest sent only to a personal inbox should produce no group run.
 
 ### If the formatted email stays in Drafts
@@ -117,6 +127,7 @@ Keep these actions in sequence with **Run after** set to success. Set **Retry po
 1. In **Run history**, open the run that created the draft. Expand the **True** branch under `If_claimed`. `Send_draft` must be the **Office 365 Outlook → Send a Draft message** action immediately after `Create_draft`.
 2. Set **Message Id** to **fx** `body('Create_draft')?['id']`, then confirm both cards use the same Outlook connection and **Run after** is set to **is successful** on `Create_draft`.
 3. If the draft's **To** address is wrong, check that `Source_sender` reads the sender of `Get_group_post` and that the `mailbox` field in `Format_digest` uses **fx** `outputs('Source_sender')`.
+4. If you see `ErrorSendAsDenied`, verify that the Outlook connection's account has **Send As** on `bondstaffnews@bond.edu.au`. [Microsoft Graph delegated sending](https://learn.microsoft.com/en-us/graph/outlook-send-mail-from-other-user)
 
 A claimed post stays **Pending** until the flow records a successful send. Check **Sent Items** and **Drafts** to see what happened. After fixing the flow, send a fresh SharePoint test digest. The existing post ID has already been claimed.
 

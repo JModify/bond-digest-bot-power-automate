@@ -6,7 +6,7 @@ Format SharePoint news digests inside Bond Microsoft 365. Power Automate reads t
 
 | Intake | Where to send the SharePoint digest | Guide |
 | --- | --- | --- |
-| SDC group mailbox | `sdc@groups.bond.edu.au`. The flow returns the formatted digest to the original Bond sender. | [SDC group mailbox setup](power-automate/group-mailbox.md) |
+| SDC group mailbox | `sdc@groups.bond.edu.au`. The flow replies to the original Bond sender from `bondstaffnews@bond.edu.au`. | [SDC group mailbox setup](power-automate/group-mailbox.md) |
 | Personal mailbox | Your own Bond email address. The flow sends the formatted digest back to your inbox. | [Personal mailbox setup](power-automate/README.md) |
 
 Both guides walk through the Power Automate cards and list the expressions to paste into the designer. Use your Bond account for the connections and workbook.

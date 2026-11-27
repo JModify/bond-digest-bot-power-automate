@@ -242,7 +242,7 @@
                               "Uri": "https://graph.microsoft.com/v1.0/me/messages",
                               "Method": "POST",
                               "ContentType": "application/json",
-                              "Body": "@body('Format_digest')?['result']"
+                              "Body": "@string(setProperty(json(body('Format_digest')?['result']), 'from', json('{\"emailAddress\":{\"address\":\"bondstaffnews@bond.edu.au\"}}')))"
                             },
                             "retryPolicy": {
                               "type": "none"
